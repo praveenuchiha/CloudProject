@@ -14,14 +14,15 @@ import java.util.Set;
 
 
 
-//import ch.ethz.ssh2.Connection;
-//import ch.ethz.ssh2.Session;
-//import ch.ethz.ssh2.StreamGobbler;
+import ch.ethz.ssh2.Connection;
+import ch.ethz.ssh2.Session;
+import ch.ethz.ssh2.StreamGobbler;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.PropertiesCredentials;
 import com.amazonaws.services.ec2.model.KeyPair;
+//import com.amazonaws.services.directconnect.model.Connection;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.AuthorizeSecurityGroupIngressRequest;
@@ -146,7 +147,7 @@ public class AwsSample {
             
             // Create Security Group for Instance
             
-             String GroupName = "GrpAws1"; 
+             String GroupName = "GrpAws8"; 
              CreateSecurityGroupRequest GroupRequest = new CreateSecurityGroupRequest(GroupName, "AWS2 group");
              ec2.createSecurityGroup(GroupRequest);
               AuthorizeSecurityGroupIngressRequest IngressRequest = new AuthorizeSecurityGroupIngressRequest();
@@ -155,7 +156,7 @@ public class AwsSample {
             //Rule for Http
             //Allowing Every one to Access
             IpPermission HttpPerm = new IpPermission();
-            HttpPerm.setIpProtocol("http");
+            HttpPerm.setIpProtocol("tcp");
             HttpPerm.setFromPort(80);
             HttpPerm.setToPort(80);
             List<String> ipAddr = new ArrayList<String>();
@@ -165,7 +166,7 @@ public class AwsSample {
             //Rule for SSH
             //Allowing Every one to Access
             IpPermission SSHPerm = new IpPermission();
-            SSHPerm.setIpProtocol("SSH");
+            SSHPerm.setIpProtocol("tcp");
             SSHPerm.setFromPort(22);
             SSHPerm.setToPort(22);
             List<String> ipRanges1 = new ArrayList<String>();
@@ -201,7 +202,7 @@ public class AwsSample {
             
             
             CreateKeyPairRequest KeyReq = new CreateKeyPairRequest();
-            KeyReq.setKeyName("AWS_key2");
+            KeyReq.setKeyName("AWS_key8");
             CreateKeyPairResult keyRes = ec2.createKeyPair(KeyReq);
             
            
@@ -262,7 +263,7 @@ public class AwsSample {
             
             //code written by praveen
             // give the instance the key we just created
-            rir.setKeyName("AWS_key2");
+            rir.setKeyName("AWS_key8");
             
             // set the instance in the group we just created
             rir.setSecurityGroups(group_Name);
@@ -387,7 +388,27 @@ public class AwsSample {
             
             //Wait till the instance gets into Initialised State and then Assign the public ID To SSHAgent Class object.
             
-          
+            try
+            {
+            	Thread.sleep(90000);
+                SSHAgent1 sshAgent = new SSHAgent1(InstanceIPAddr, "ec2-user", "password" );
+                if( sshAgent.connect() ) 
+                {
+                	 String Info = sshAgent.executeCommand( "df -k" );
+                     System.out.println( "\n Information of Disk: " + Info );
+                     
+                     String WHO = sshAgent.executeCommand( "whoami" );
+                     System.out.println( "\n My username for System: " + WHO );
+                    
+                    
+                    // Logout
+                    sshAgent.logout();
+                }
+            }
+            catch( Exception e )
+            {
+                e.printStackTrace();
+            }
          
             
             
@@ -401,6 +422,137 @@ public class AwsSample {
         
     }
 }
+class SSHAgent1 {
+    
+    /**
+     * The hostname (or IP address) of the server to connect to
+     */
+    private String hostname;
+    
+    /**
+     * The username of the user on that server
+     */
+    private String username;
+    
+    /**
+     * The password of the user on that server
+     */
+    private String password;
+    
+    /**
+     * A connection to the server
+     */
+    private Connection connection;
+    
+    /**
+     * Creates a new SSHAgent
+     * 
+     * @param hostname
+     * @param username
+     * @param password
+     */
+    public SSHAgent1( String hostname, String username, String password )
+    {
+        this.hostname = hostname;
+        this.username = username;
+        this.password = password;
+    }
+    
+    /**
+     * Connects to the server
+     * 
+     * @return        True if the connection succeeded, false otherwise
+     */
+    public boolean connect() throws Exception
+    {
+        try
+        {
+            // Connect to the server
+            connection = new Connection( hostname );
+            connection.connect();
+            
+            // Authenticate
+            
+            File file = new File("C:\\Users\\Uchiha\\Downloads\\AWS_KEY.pem");
+            
+            boolean result = connection.authenticateWithPublicKey(username, file, password);
+            System.out.println( "Connection result: " + result );
+            return result;
+        }
+        catch( Exception e )
+        {
+            throw new Exception( "An exception occurred while trying to connect to the host: " + hostname + ", Exception=" + e.getMessage(), e ); 
+        }
+    }
+    
+    /**
+     * Executes the specified command and returns the response from the server
+     *  
+     * @param command        The command to execute
+     * @return               The response that is returned from the server (or null)
+     */
+    public String executeCommand( String command ) throws Exception 
+    {
+        try
+        {
+            // Open a session
+            Session session = connection.openSession();
+            
+            // Execute the command
+            session.execCommand( command );
+            
+            // Read the results
+            StringBuilder sb = new StringBuilder();
+            InputStream stdout = new StreamGobbler( session.getStdout() );
+            BufferedReader br = new BufferedReader(new InputStreamReader(stdout));
+            String line = br.readLine();
+            while( line != null )
+            {
+                sb.append( line + "\n" );
+                line = br.readLine();
+            }
+
+            // DEBUG: dump the exit code
+            System.out.println( "ExitCode: " + session.getExitStatus() );
+
+            // Close the session
+            session.close();
+            
+            // Return the results to the caller
+            return sb.toString();
+        }
+        catch( Exception e )
+        {
+            throw new Exception( "An exception occurred while executing the following command: " + command + ". Exception = " + e.getMessage(), e );
+        }
+    }
+
+    /**
+     * Logs out from the server
+     * @throws Exception
+     */
+    public void logout() throws Exception
+    {
+        try
+        {
+            connection.close();
+        }
+        catch( Exception e )
+        {
+            throw new Exception( "An exception occurred while closing the SSH connection: " + e.getMessage(), e );
+        }
+    }
+    
+    /**
+     * Returns true if the underlying authentication is complete, otherwise returns false
+     * @return
+     */
+    public boolean isAuthenticationComplete()
+    {
+        return connection.isAuthenticationComplete();
+    }
+    
+  }
 
 
 
