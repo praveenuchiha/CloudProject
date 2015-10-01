@@ -1,40 +1,45 @@
-/*
- * Copyright 2010 Amazon.com, Inc. or its affiliates. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License").
- * You may not use this file except in compliance with the License.
- * A copy of the License is located at
- *
- *  http://aws.amazon.com/apache2.0
- *
- * or in the "license" file accompanying this file. This file is distributed
- * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
- * express or implied. See the License for the specific language governing
- * permissions and limitations under the License.
- * 
- * Modified by Sambit Sahu
- * Modified by Kyung-Hwa Kim (kk2515@columbia.edu)
- * 
- * 
- */
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.StringReader;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
+
+
+//import ch.ethz.ssh2.Connection;
+//import ch.ethz.ssh2.Session;
+//import ch.ethz.ssh2.StreamGobbler;
+
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.PropertiesCredentials;
+import com.amazonaws.services.ec2.model.KeyPair;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
+import com.amazonaws.services.ec2.model.AuthorizeSecurityGroupIngressRequest;
+import com.amazonaws.services.ec2.model.CreateKeyPairRequest;
+import com.amazonaws.services.ec2.model.CreateKeyPairResult;
+import com.amazonaws.services.ec2.model.CreateSecurityGroupRequest;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DescribeAvailabilityZonesResult;
 import com.amazonaws.services.ec2.model.DescribeImagesResult;
+import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
+import com.amazonaws.services.ec2.model.DescribeInstanceStatusResult;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.DescribeKeyPairsResult;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceState;
+import com.amazonaws.services.ec2.model.InstanceStatus;
+import com.amazonaws.services.ec2.model.IpPermission;
 import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
 import com.amazonaws.services.ec2.model.RunInstancesResult;
@@ -42,6 +47,10 @@ import com.amazonaws.services.ec2.model.StartInstancesRequest;
 import com.amazonaws.services.ec2.model.StopInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
+
+
+
+
 
 
 public class AwsSample {
@@ -55,6 +64,8 @@ public class AwsSample {
 
     static AmazonEC2      ec2;
 
+    static KeyPair keyPair;
+    
     public static void main(String[] args) throws Exception {
 
 
@@ -88,18 +99,20 @@ public class AwsSample {
              *  #3 Describe Available Images
              *  
              *********************************************/
+            /*
             System.out.println("#3 Describe Available Images");
             DescribeImagesResult dir = ec2.describeImages();
             List<Image> images = dir.getImages();
             System.out.println("You have " + images.size() + " Amazon images");
             
+            */
             
             /*********************************************
              *                 
              *  #4 Describe Key Pair
              *                 
              *********************************************/
-            System.out.println("#9 Describe Key Pair");
+            System.out.println("#4 Describe Key Pair");
             DescribeKeyPairsResult dkr = ec2.describeKeyPairs();
             System.out.println(dkr.toString());
             
@@ -108,7 +121,7 @@ public class AwsSample {
              *  #5 Describe Current Instances
              *  
              *********************************************/
-            System.out.println("#4 Describe Current Instances");
+            System.out.println("#5 Describe Current Instances");
             DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
             List<Reservation> reservations = describeInstancesRequest.getReservations();
             Set<Instance> instances = new HashSet<Instance>();
@@ -128,33 +141,201 @@ public class AwsSample {
             	System.out.println(instanceId+" "+is.getName());
             }
             
+            
+            //Below Code is Added by Praveen 
+            
+            // Create Security Group for Instance
+            
+             String GroupName = "GrpAws1"; 
+             CreateSecurityGroupRequest GroupRequest = new CreateSecurityGroupRequest(GroupName, "AWS2 group");
+             ec2.createSecurityGroup(GroupRequest);
+              AuthorizeSecurityGroupIngressRequest IngressRequest = new AuthorizeSecurityGroupIngressRequest();
+              IngressRequest.setGroupName(GroupName);
+           
+            //Rule for Http
+            //Allowing Every one to Access
+            IpPermission HttpPerm = new IpPermission();
+            HttpPerm.setIpProtocol("http");
+            HttpPerm.setFromPort(80);
+            HttpPerm.setToPort(80);
+            List<String> ipAddr = new ArrayList<String>();
+            ipAddr.add("0.0.0.0/0"); 
+            HttpPerm.setIpRanges(ipAddr);
+            
+            //Rule for SSH
+            //Allowing Every one to Access
+            IpPermission SSHPerm = new IpPermission();
+            SSHPerm.setIpProtocol("SSH");
+            SSHPerm.setFromPort(22);
+            SSHPerm.setToPort(22);
+            List<String> ipRanges1 = new ArrayList<String>();
+            ipRanges1.add("0.0.0.0/0"); 
+            SSHPerm.setIpRanges(ipRanges1);
+              
+                       
+            //Rule for TCP
+            //Allowing Every one to Access
+            IpPermission TCPPerm = new IpPermission();
+            TCPPerm.setIpProtocol("tcp");
+            TCPPerm.setFromPort(0);
+            TCPPerm.setToPort(65535);
+            List<String> ipRanges3 = new ArrayList<String>();
+            ipRanges3.add("0.0.0.0/0"); 
+            TCPPerm.setIpRanges(ipRanges3);
+            
+         
+            // Rules added to the Ingress Request
+            List<IpPermission> Rules = new ArrayList<IpPermission>();
+            Rules.add(HttpPerm);
+            Rules.add(SSHPerm);
+            Rules.add(TCPPerm);
+            IngressRequest.setIpPermissions(Rules);
+            
+            ec2.authorizeSecurityGroupIngress(IngressRequest);
+            List<String> group_Name = new ArrayList<String>();
+            group_Name.add(GroupName);
+            
+            
+            
+            // Key Pair Request         
+            
+            
+            CreateKeyPairRequest KeyReq = new CreateKeyPairRequest();
+            KeyReq.setKeyName("AWS_key2");
+            CreateKeyPairResult keyRes = ec2.createKeyPair(KeyReq);
+            
+           
+            keyPair = keyRes.getKeyPair();
+            
+            System.out.println("\n Name of the key = " + keyPair.getKeyName()+"\n ");
+            		
+            System.out.println("Public key =" + keyPair.getKeyFingerprint()+"\n ");
+            		
+            System.out.println("The Encrypted Key = \n" + keyPair.getKeyMaterial()+"\n");
+           
+            
+            // Store the Key in .pem File
+          
+            		
+
+            try {
+            	 
+    			String content = keyPair.getKeyMaterial();
+     
+    			 String fileName="C:\\Users\\Uchiha\\Downloads\\"+"AWS_KEY"+".pem"; 
+    	         File Key_File = new File(fileName); 
+     
+    			// if file doesnt exists, then create it
+    	         
+    			if (!Key_File.exists()) {
+    				Key_File.createNewFile();
+    			}
+     
+    			FileWriter fw = new FileWriter(Key_File.getAbsoluteFile());
+    			BufferedWriter bw = new BufferedWriter(fw);
+    			bw.write(content);
+    			bw.close();
+     
+    			System.out.println("Done");
+     
+    		} catch (IOException e) {
+    			e.printStackTrace();
+    		}
+            
+            // End of Code
+            
+          
+            
+            
             /*********************************************
              * 
              *  #6 Create an Instance
              *  
              *********************************************/
-            System.out.println("#5 Create an Instance");
+            
+            System.out.println("#6 Create an Instance");
             String imageId = "ami-76f0061f"; //Basic 32-bit Amazon Linux AMI
             int minInstanceCount = 1; // create 1 instance
             int maxInstanceCount = 1;
             RunInstancesRequest rir = new RunInstancesRequest(imageId, minInstanceCount, maxInstanceCount);
+            
+            
+            //code written by praveen
+            // give the instance the key we just created
+            rir.setKeyName("AWS_key2");
+            
+            // set the instance in the group we just created
+            rir.setSecurityGroups(group_Name);
+            
             RunInstancesResult result = ec2.runInstances(rir);
+            
+          
+            
+			
             
             //get instanceId from the result
             List<Instance> resultInstance = result.getReservation().getInstances();
             String createdInstanceId = null;
+            String PublicDNSName="";
+            
+            
             for (Instance ins : resultInstance){
+            	
+            	
             	createdInstanceId = ins.getInstanceId();
+            	
+            	PublicDNSName = ins.getPublicIpAddress();
+            	PublicDNSName = ins.getPrivateDnsName();
+            	PublicDNSName = ins.getPrivateIpAddress();
+            	PublicDNSName = ins.getPublicDnsName();
+            	
             	System.out.println("New instance has been created: "+ins.getInstanceId());
+            	
+            	
+            }
+            
+                   
+           //waiting for instance to get into Initialise state
+            DescribeInstanceStatusRequest describeInstanceRequest = new DescribeInstanceStatusRequest().withInstanceIds(createdInstanceId);
+        	DescribeInstanceStatusResult describeInstanceResult = ec2.describeInstanceStatus(describeInstanceRequest);
+        	List<InstanceStatus> state1 = describeInstanceResult.getInstanceStatuses();
+        	while (state1.size() < 1) { 
+        	    // Do nothing, just wait, have thread sleep if needed
+        	    describeInstanceResult = ec2.describeInstanceStatus(describeInstanceRequest);
+        	    state1 = describeInstanceResult.getInstanceStatuses();
+        	    Thread.sleep(2000);
+       	    
+        	}
+        	
+            describeInstancesRequest = ec2.describeInstances();
+            reservations = describeInstancesRequest.getReservations();
+            
+            // add all instances to a Set.
+            for (Reservation reservation : reservations) {
+            	instances.addAll(reservation.getInstances());
             }
             
             
+            String InstanceIPAddr= null; 
+            
+            for (Instance instmp : instances){
+            	
+            	// instance id
+            	String instanceId = instmp.getInstanceId();
+            	if (instanceId.equals(createdInstanceId)){
+            		InstanceIPAddr = instmp.getPublicIpAddress();
+            	}
+            }
+
+        	System.out.println("\tPublic IP: "+ InstanceIPAddr);
+            //end of code
+           
             /*********************************************
              * 
              *  #7 Create a 'tag' for the new instance.
              *  
              *********************************************/
-            System.out.println("#6 Create a 'tag' for the new instance.");
+            System.out.println("#7 Create a 'tag' for the new instance.");
             List<String> resources = new LinkedList<String>();
             List<Tag> tags = new LinkedList<Tag>();
             Tag nameTag = new Tag("Name", "MyFirstInstance");
@@ -172,7 +353,7 @@ public class AwsSample {
              *  #8 Stop/Start an Instance
              *  
              *********************************************/
-            System.out.println("#7 Stop the Instance");
+            System.out.println("#8 Stop the Instance");
             List<String> instanceIds = new LinkedList<String>();
             instanceIds.add(createdInstanceId);
             
@@ -190,7 +371,7 @@ public class AwsSample {
              *  #9 Terminate an Instance
              *  
              *********************************************/
-            System.out.println("#8 Terminate the Instance");
+            System.out.println("#9 Terminate the Instance");
             TerminateInstancesRequest tir = new TerminateInstancesRequest(instanceIds);
             //ec2.terminateInstances(tir);
             
@@ -202,6 +383,12 @@ public class AwsSample {
              *********************************************/
             ec2.shutdown();
             
+            ///SSH Programatically
+            
+            //Wait till the instance gets into Initialised State and then Assign the public ID To SSHAgent Class object.
+            
+          
+         
             
             
         } catch (AmazonServiceException ase) {
@@ -214,3 +401,7 @@ public class AwsSample {
         
     }
 }
+
+
+
+ 
